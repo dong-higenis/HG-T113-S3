@@ -27,7 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUTPUT_DIR="${SCRIPT_DIR}/output"
 
 # 복사할 바이너리 경로
-UBOOT_IMAGE="${SCRIPT_DIR}/u-boot/u-boot-sunxi-with-spl.bin"
+UBOOT_IMAGE="${SCRIPT_DIR}/uboot/u-boot-sunxi-with-spl.bin"
 
 KERNEL_IMAGE="${SCRIPT_DIR}/kernel/build/arch/arm/boot/zImage"
 KERNEL_DTB="${SCRIPT_DIR}/kernel/build/arch/arm/boot/dts/allwinner/hg-t113s3-kit-linux.dtb"
@@ -44,7 +44,7 @@ JOBS="${JOBS:-$(nproc)}"
 ARCH="arm"
 CROSS_COMPILE="arm-linux-gnueabihf-"
 
-UBOOT_DIR="${SCRIPT_DIR}/u-boot"
+UBOOT_DIR="${SCRIPT_DIR}/uboot"
 
 KERNEL_DIR="${SCRIPT_DIR}/kernel/linux-6.18.36"
 KERNEL_BUILD_DIR="${SCRIPT_DIR}/kernel/build"
