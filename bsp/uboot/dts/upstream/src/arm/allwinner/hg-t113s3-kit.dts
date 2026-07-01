@@ -1,0 +1,104 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+#include "sun8i-t113s.dtsi"
+
+/ {
+	model = "Custom T113-S3 Board";
+	compatible = "custom,t113s3-board",
+		     "allwinner,sun8i-t113s";
+
+	aliases {
+		serial0 = &uart0;
+		ethernet0 = &emac;
+		spi0 = &spi0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	reg_vcc_3v3: regulator-vcc-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc-3v3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+};
+
+&dcxo {
+	clock-frequency = <24000000>;
+};
+
+&pio {
+	vcc-pc-supply = <&reg_vcc_3v3>;
+	vcc-pe-supply = <&reg_vcc_3v3>;
+	vcc-pg-supply = <&reg_vcc_3v3>;
+
+	uart0_pe_pins: uart0-pe-pins {
+		pins = "PE2", "PE3";
+		function = "uart0";
+	};
+
+	rmii_pg_pins: rmii-pg-pins {
+		pins = "PG0", "PG1", "PG2", "PG3",
+		       "PG4", "PG5",
+		       "PG12", "PG13", "PG14", "PG15";
+		function = "emac";
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pe_pins>;
+	status = "okay";
+};
+
+&spi0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi0_pins>;
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+
+		spi-max-frequency = <25000000>;
+		spi-tx-bus-width = <1>;
+		spi-rx-bus-width = <1>;
+	};
+};
+
+&emac {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rmii_pg_pins>;
+
+	phy-mode = "rmii";
+	phy-handle = <&ethernet_phy>;
+
+	status = "okay";
+};
+
+&mdio {
+	ethernet_phy: ethernet-phy@0 {
+		compatible = "ethernet-phy-ieee802.3-c22";
+
+		reg = <0>;
+
+		max-speed = <100>;
+	};
+};
+
+&usb_otg {
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&usbphy {
+	status = "okay";
+};
