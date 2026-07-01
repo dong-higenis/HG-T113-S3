@@ -1,0 +1,29 @@
+# 빌드 결과물
+build/
+output/
+*.o
+*.a
+*.so
+*.bin
+*.img
+*.dtb
+*.dtbo
+*.map
+*.log
+
+# Buildroot 생성물
+rootfs/buildroot-*/output/
+
+# Kernel 생성물
+kernel/build/
+
+# 편집기 및 임시 파일
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# 비밀정보
+.env
+*.pem
+*.key
