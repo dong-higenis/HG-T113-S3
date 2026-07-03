@@ -81,8 +81,6 @@ if [ ! -d "${UBOOT_DIR}" ]; then
     exit 1
 fi
 
-make -C "${UBOOT_DIR}" distclean
-
 make -C "${UBOOT_DIR}" \
     ARCH="${ARCH}" \
     CROSS_COMPILE="${CROSS_COMPILE}" \

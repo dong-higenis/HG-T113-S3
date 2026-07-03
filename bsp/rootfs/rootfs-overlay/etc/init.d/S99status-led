@@ -1,0 +1,39 @@
+#!/bin/sh
+
+LED="/sys/class/leds/status"
+
+case "$1" in
+    start)
+        if [ ! -d "$LED" ]; then
+            echo "Status LED not found: $LED"
+            exit 1
+        fi
+
+        if ! grep -qw timer "$LED/trigger"; then
+            echo "LED timer trigger is not supported"
+            echo "Enable CONFIG_LEDS_TRIGGER_TIMER=y"
+            exit 1
+        fi
+
+        echo timer > "$LED/trigger" || exit 1
+        echo 500 > "$LED/delay_on" || exit 1
+        echo 500 > "$LED/delay_off" || exit 1
+        ;;
+
+    stop)
+        echo none > "$LED/trigger"
+        echo 0 > "$LED/brightness"
+        ;;
+
+    restart)
+        "$0" stop
+        "$0" start
+        ;;
+
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit 0
