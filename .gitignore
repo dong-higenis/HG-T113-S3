@@ -13,6 +13,7 @@ output/
 
 # Buildroot 생성물
 rootfs/buildroot-*/output/
+rootfs/buildroot-*/dl/
 
 # Kernel 생성물
 kernel/build/
