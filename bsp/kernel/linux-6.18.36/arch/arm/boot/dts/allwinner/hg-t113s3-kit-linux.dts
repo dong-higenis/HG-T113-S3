@@ -1,0 +1,313 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+
+/dts-v1/;
+
+#include "sun8i-t113s.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "Custom T113-S3 Board";
+	compatible = "custom,t113s3-board",
+		     "allwinner,sun8i-t113s";
+
+	aliases {
+		serial0 = &uart0;
+		spi0 = &spi0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x40000000 0x08000000>; /* 128 MiB */
+	};
+
+	reg_vcc_3v3: regulator-vcc-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc-3v3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	lcd_backlight: backlight {
+		compatible = "gpio-backlight";
+
+		/*
+		 * PD22 = LCD_BLK
+		 * MP9284 EN, High일 때 백라이트 ON
+		 */
+		gpios = <&pio 3 22 GPIO_ACTIVE_HIGH>;
+
+		/*
+		 * 초기 Bring-up 단계에서는 항상 켜 둔다.
+		 * 정상 동작 확인 후 제거해도 된다.
+		 */
+		default-on;
+	};
+
+	lcd_panel: panel {
+		compatible = "eastrising,er-tft050-6", "panel-dpi";
+
+		/* 패널 논리 전원 3.3V */
+		power-supply = <&reg_vcc_3v3>;
+
+		/*
+		 * PE9 = 회로도상 LCD_RESET
+		 *
+		 * 실제 ER-TFT050-6의 31번 핀은 DISP이며:
+		 * High = Normal Display
+		 * Low  = Standby
+		 */
+		enable-gpios = <&pio 4 9 GPIO_ACTIVE_HIGH>;
+
+		backlight = <&lcd_backlight>;
+
+		width-mm = <108>;
+		height-mm = <65>;
+
+		panel-timing {
+			/* ST7265 권장 Typical 값 */
+			clock-frequency = <25000000>;
+
+			hactive = <800>;
+			hfront-porch = <8>;
+			hback-porch = <8>;
+			hsync-len = <4>;
+
+			vactive = <480>;
+			vfront-porch = <16>;
+			vback-porch = <16>;
+			vsync-len = <4>;
+
+			/*
+			 * ST7265 기본 극성 기준
+			 */
+			hsync-active = <0>;
+			vsync-active = <0>;
+			de-active = <1>;
+			pixelclk-active = <0>;
+		};
+
+		port {
+			lcd_panel_in: endpoint {
+				remote-endpoint =
+					<&tcon_lcd0_out_panel>;
+			};
+		};
+	};
+	leds {
+		compatible = "gpio-leds";
+
+		status_led: led-status {
+		label = "status";
+		function = LED_FUNCTION_STATUS;
+
+		gpios = <&pio 6 7 GPIO_ACTIVE_HIGH>;
+
+		linux,default-trigger = "timer";
+		default-state = "off";
+		};
+	};
+};
+
+&dcxo {
+	clock-frequency = <24000000>;
+};
+
+&pio {
+	/*
+	 * PC: SPI NOR
+	 * PE: UART0
+	 * PF: SD card
+	 * PD: LCD
+	 */
+	vcc-pc-supply = <&reg_vcc_3v3>;
+	vcc-pe-supply = <&reg_vcc_3v3>;
+	vcc-pf-supply = <&reg_vcc_3v3>;
+	vcc-pd-supply = <&reg_vcc_3v3>;
+
+	uart0_pe_pins: uart0-pe-pins {
+		pins = "PE2", "PE3";
+		function = "uart0";
+	};
+
+	i2c2_pe_pins: i2c2-pe-pins {
+		pins = "PE12", "PE13";
+		function = "i2c2";
+	};
+};
+
+/* Debug UART0: PE2=TX, PE3=RX */
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pe_pins>;
+	status = "okay";
+};
+
+/*
+ * SPI0:
+ * PC2 = CLK
+ * PC3 = CS0
+ * PC4 = MOSI / IO0
+ * PC5 = MISO / IO1
+ *
+ * PC6/PC7은 현재 1-bit SPI 모드에서는 사용하지 않는다.
+ */
+&spi0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi0_pins>;
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+
+		spi-max-frequency = <25000000>;
+		spi-tx-bus-width = <1>;
+		spi-rx-bus-width = <1>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			/*
+			 * SPL + U-Boot + U-Boot environment
+			 * 0x000000 ~ 0x0fffff
+			 */
+			partition@0 {
+				label = "bootloader";
+				reg = <0x000000 0x100000>;
+				read-only;
+			};
+
+			/*
+			 * Linux zImage
+			 * 0x100000 ~ 0x8fffff
+			 */
+			partition@100000 {
+				label = "kernel";
+				reg = <0x100000 0x800000>;
+				read-only;
+			};
+
+			/*
+			 * Linux DTB
+			 * 0x900000 ~ 0x91ffff
+			 */
+			partition@900000 {
+				label = "dtb";
+				reg = <0x900000 0x020000>;
+				read-only;
+			};
+
+			/*
+			 * 사용자 데이터 영역
+			 * 0x920000 ~ 0x1ffffff
+			 * 총 0x16e0000 bytes
+			 */
+			partition@920000 {
+				label = "rootfs";
+				reg = <0x920000 0x16e0000>;
+			};
+		};
+	};
+};
+
+/*
+ * MMC0 / microSD
+ *
+ * PF0 = DAT1
+ * PF1 = DAT0
+ * PF2 = CLK
+ * PF3 = CMD
+ * PF4 = DAT3
+ * PF5 = DAT2
+ */
+&mmc0_pins {
+	drive-strength = <30>;
+	bias-pull-up;
+};
+
+&mmc0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mmc0_pins>;
+
+	vmmc-supply = <&reg_vcc_3v3>;
+
+	bus-width = <4>;
+	max-frequency = <25000000>; // 25MHz
+
+	/*
+	 * SD 신호 전압이 고정 3.3V이므로
+	 * 1.8V UHS 전압 전환을 금지한다.
+	 */
+	no-1-8-v;
+
+	/*
+	 * 카드 감지 핀이 없으면 polling 사용.
+	 */
+	broken-cd;
+
+
+	/*
+	* WP(Write Protect) 핀도 사용하지 않는 경우.
+	* microSD 슬롯이면 일반적으로 WP 핀이 없다.
+	*/
+	disable-wp;
+
+	status = "okay";
+};
+
+/*
+ * Allwinner Display Engine 활성화
+ */
+&de {
+	status = "okay";
+};
+
+/*
+ * TCON LCD0에서 PD0~PD21 RGB666 핀 사용
+ */
+&tcon_lcd0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&lcd_rgb666_pins>;
+	status = "okay";
+};
+
+&i2c2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2_pe_pins>;
+	clock-frequency = <100000>;
+	status = "okay";
+
+	touchscreen@38 {
+		compatible = "edt,edt-ft5206";
+		reg = <0x38>;
+		interrupt-parent = <&pio>;
+		interrupts = <1 7 IRQ_TYPE_EDGE_FALLING>;   /* PB7 */
+		reset-gpios = <&pio 1 6 GPIO_ACTIVE_LOW>;   /* PB6 */
+		touchscreen-size-x = <800>;
+		touchscreen-size-y = <480>;
+		status = "okay";
+	};
+};
+
+/*
+ * TCON LCD0 RGB 출력과 DPI 패널 연결
+ *
+ * endpoint@1은 기존 DSI 출력이므로,
+ * RGB 패널은 endpoint@0을 사용한다.
+ */
+&tcon_lcd0_out {
+	tcon_lcd0_out_panel: endpoint@0 {
+		reg = <0>;
+		remote-endpoint = <&lcd_panel_in>;
+	};
+};
