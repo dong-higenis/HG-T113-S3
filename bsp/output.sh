@@ -118,7 +118,7 @@ make -C "${KERNEL_DIR}" \
     ARCH="${ARCH}" \
     CROSS_COMPILE="${CROSS_COMPILE}" \
     -j"${JOBS}" \
-    zImage dtbs
+    zImage dtbs modules
 
 #
 # Buildroot 빌드
