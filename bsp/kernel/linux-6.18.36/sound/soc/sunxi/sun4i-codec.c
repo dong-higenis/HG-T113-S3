@@ -267,6 +267,36 @@
 
 /* TODO H3 DAP (Digital Audio Processing) bits */
 
+
+/*
+ * sun20i D1 and similar codecs specific registers
+ *
+ * Almost all registers moved on D1, including ADC digital controls,
+ * FIFO and RX data registers. Only DAC control are at the same offset.
+ */
+#define SUN20I_D1_CODEC_DAC_VOL_CTRL		(0x04)
+#define SUN20I_D1_CODEC_DAC_VOL_SEL		(16)
+#define SUN20I_D1_CODEC_DAC_VOL_L		(8)
+#define SUN20I_D1_CODEC_DAC_VOL_R		(0)
+#define SUN20I_D1_CODEC_DAC_FIFOC		(0x10)
+#define SUN20I_D1_CODEC_ADC_FIFOC		(0x30)
+#define SUN20I_D1_CODEC_ADC_FIFOC_EN_AD		(28)
+#define SUN20I_D1_CODEC_ADC_FIFOC_RX_SAMPLE_BITS	(16)
+#define SUN20I_D1_CODEC_ADC_FIFOC_RX_TRIG_LEVEL		(4)
+#define SUN20I_D1_CODEC_ADC_FIFOC_ADC_DRQ_EN		(3)
+#define SUN20I_D1_CODEC_ADC_VOL_CTRL1		(0x34)
+#define SUN20I_D1_CODEC_ADC_VOL_CTRL1_ADC3_VOL	(16)
+#define SUN20I_D1_CODEC_ADC_VOL_CTRL1_ADC2_VOL	(8)
+#define SUN20I_D1_CODEC_ADC_VOL_CTRL1_ADC1_VOL	(0)
+#define SUN20I_D1_CODEC_ADC_RXDATA		(0x40)
+#define SUN20I_D1_CODEC_ADC_DIG_CTRL		(0x50)
+#define SUN20I_D1_CODEC_ADC_DIG_CTRL_ADC3_CH_EN	(2)
+#define SUN20I_D1_CODEC_ADC_DIG_CTRL_ADC2_CH_EN	(1)
+#define SUN20I_D1_CODEC_ADC_DIG_CTRL_ADC1_CH_EN	(0)
+#define SUN20I_D1_CODEC_VRA1SPEEDUP_DOWN_CTRL	(0x54)
+
+/* TODO D1 DAP (Digital Audio Processing) bits */
+
 #define SUN4I_DMA_MAX_BURST			(8)
 
 /* suniv specific registers */
@@ -325,11 +355,14 @@
 
 #define SUNIV_CODEC_ADC_DBG		(0x4c)
 
+struct sun4i_codec_quirks;
+
 struct sun4i_codec {
 	struct device	*dev;
 	struct regmap	*regmap;
 	struct clk	*clk_apb;
 	struct clk	*clk_module;
+	struct clk	*clk_module_dac;
 	struct reset_control *rst;
 	struct gpio_desc *gpio_pa;
 	struct gpio_desc *gpio_hp;
@@ -661,7 +694,11 @@ static int sun4i_codec_hw_params(struct snd_pcm_substream *substream,
 	if (!clk_freq)
 		return -EINVAL;
 
-	ret = clk_set_rate(scodec->clk_module, clk_freq);
+	if (scodec->clk_module_dac &&
+	    substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		ret = clk_set_rate(scodec->clk_module_dac, clk_freq);
+	else
+		ret = clk_set_rate(scodec->clk_module, clk_freq);
 	if (ret)
 		return ret;
 
@@ -690,7 +727,11 @@ static int sun4i_codec_startup(struct snd_pcm_substream *substream,
 	regmap_field_set_bits(scodec->reg_dac_fifoc,
 			      3 << SUN4I_CODEC_DAC_FIFOC_DRQ_CLR_CNT);
 
-	return clk_prepare_enable(scodec->clk_module);
+	if (scodec->clk_module_dac &&
+	    substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		return clk_prepare_enable(scodec->clk_module_dac);
+	else
+		return clk_prepare_enable(scodec->clk_module);
 }
 
 static void sun4i_codec_shutdown(struct snd_pcm_substream *substream,
@@ -699,7 +740,11 @@ static void sun4i_codec_shutdown(struct snd_pcm_substream *substream,
 	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
 	struct sun4i_codec *scodec = snd_soc_card_get_drvdata(rtd->card);
 
-	clk_disable_unprepare(scodec->clk_module);
+	if (scodec->clk_module_dac &&
+	    substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
+		clk_disable_unprepare(scodec->clk_module_dac);
+	else
+		clk_disable_unprepare(scodec->clk_module);
 }
 
 static const struct snd_soc_dai_ops sun4i_codec_dai_ops = {
@@ -1538,6 +1583,57 @@ static const struct snd_soc_component_driver suniv_codec_codec = {
 	.endianness		= 1,
 };
 
+
+/* sun20i D1 codec */
+static const DECLARE_TLV_DB_SCALE(sun20i_d1_codec_dvol_scale, -12000, 75, 1);
+
+static const struct snd_kcontrol_new sun20i_d1_codec_codec_controls[] = {
+	SOC_SINGLE_TLV("DAC Playback Volume", SUN4I_CODEC_DAC_DPC,
+		       SUN4I_CODEC_DAC_DPC_DVOL, 0x3f, 1,
+		       sun6i_codec_dvol_scale),
+	SOC_DOUBLE_TLV("DAC Front Playback Volume", SUN20I_D1_CODEC_DAC_VOL_CTRL,
+		       SUN20I_D1_CODEC_DAC_VOL_L, SUN20I_D1_CODEC_DAC_VOL_R,
+		       0xff, 0, sun20i_d1_codec_dvol_scale),
+
+	SOC_SINGLE_TLV("ADC1 Capture Volume", SUN20I_D1_CODEC_ADC_VOL_CTRL1,
+		       SUN20I_D1_CODEC_ADC_VOL_CTRL1_ADC1_VOL, 0xff, 0,
+		       sun20i_d1_codec_dvol_scale),
+	SOC_SINGLE_TLV("ADC2 Capture Volume", SUN20I_D1_CODEC_ADC_VOL_CTRL1,
+		       SUN20I_D1_CODEC_ADC_VOL_CTRL1_ADC2_VOL, 0xff, 0,
+		       sun20i_d1_codec_dvol_scale),
+	SOC_SINGLE_TLV("ADC3 Capture Volume", SUN20I_D1_CODEC_ADC_VOL_CTRL1,
+		       SUN20I_D1_CODEC_ADC_VOL_CTRL1_ADC3_VOL, 0xff, 0,
+		       sun20i_d1_codec_dvol_scale),
+};
+
+static const struct snd_soc_dapm_widget sun20i_d1_codec_codec_widgets[] = {
+	/* Digital parts of the ADCs */
+	SND_SOC_DAPM_SUPPLY("ADC Enable", SUN20I_D1_CODEC_ADC_FIFOC,
+			    SUN20I_D1_CODEC_ADC_FIFOC_EN_AD, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("ADC1 CH Enable", SUN20I_D1_CODEC_ADC_DIG_CTRL,
+			    SUN20I_D1_CODEC_ADC_DIG_CTRL_ADC1_CH_EN, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("ADC2 CH Enable", SUN20I_D1_CODEC_ADC_DIG_CTRL,
+			    SUN20I_D1_CODEC_ADC_DIG_CTRL_ADC2_CH_EN, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("ADC3 CH Enable", SUN20I_D1_CODEC_ADC_DIG_CTRL,
+			    SUN20I_D1_CODEC_ADC_DIG_CTRL_ADC3_CH_EN, 0, NULL, 0),
+
+	/* Digital parts of the DACs */
+	SND_SOC_DAPM_SUPPLY("DAC Enable", SUN4I_CODEC_DAC_DPC,
+			    SUN4I_CODEC_DAC_DPC_EN_DA, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("DAC VOL_SEL Enable", SUN20I_D1_CODEC_DAC_VOL_CTRL,
+			    SUN20I_D1_CODEC_DAC_VOL_SEL, 0, NULL, 0),
+};
+
+static const struct snd_soc_component_driver sun20i_d1_codec_codec = {
+	.controls		= sun20i_d1_codec_codec_controls,
+	.num_controls		= ARRAY_SIZE(sun20i_d1_codec_codec_controls),
+	.dapm_widgets		= sun20i_d1_codec_codec_widgets,
+	.num_dapm_widgets	= ARRAY_SIZE(sun20i_d1_codec_codec_widgets),
+	.idle_bias_on		= 1,
+	.use_pmdown_time	= 1,
+	.endianness		= 1,
+};
+
 static const struct snd_soc_component_driver sun4i_codec_component = {
 	.name			= "sun4i-codec",
 	.legacy_dai_naming	= 1,
@@ -2080,6 +2176,67 @@ static struct snd_soc_card *suniv_codec_create_card(struct device *dev)
 	return card;
 };
 
+
+static const struct snd_soc_dapm_route sun20i_d1_codec_card_routes[] = {
+	/* ADC Routes */
+	{ "ADC1", NULL, "ADC Enable" },
+	{ "ADC2", NULL, "ADC Enable" },
+	{ "ADC3", NULL, "ADC Enable" },
+	{ "ADC1", NULL, "ADC1 CH Enable" },
+	{ "ADC2", NULL, "ADC2 CH Enable" },
+	{ "ADC3", NULL, "ADC3 CH Enable" },
+	{ "Codec Capture", NULL, "ADC1" },
+	{ "Codec Capture", NULL, "ADC2" },
+	{ "Codec Capture", NULL, "ADC3" },
+
+	/* DAC Routes */
+	{ "Left DAC", NULL, "DAC Enable" },
+	{ "Right DAC", NULL, "DAC Enable" },
+	{ "Left DAC", NULL, "DAC VOL_SEL Enable" },
+	{ "Right DAC", NULL, "DAC VOL_SEL Enable" },
+	{ "Left DAC", NULL, "Codec Playback" },
+	{ "Right DAC", NULL, "Codec Playback" },
+};
+
+static struct snd_soc_card *sun20i_d1_codec_create_card(struct device *dev)
+{
+	struct snd_soc_card *card;
+	int ret;
+
+	card = devm_kzalloc(dev, sizeof(*card), GFP_KERNEL);
+	if (!card)
+		return ERR_PTR(-ENOMEM);
+
+	aux_dev.dlc.of_node = of_parse_phandle(dev->of_node,
+					       "allwinner,codec-analog-controls",
+					       0);
+	if (!aux_dev.dlc.of_node) {
+		dev_err(dev, "Can't find analog controls for codec.\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	card->dai_link = sun4i_codec_create_link(dev, &card->num_links);
+	if (!card->dai_link)
+		return ERR_PTR(-ENOMEM);
+
+	card->dev		= dev;
+	card->owner		= THIS_MODULE;
+	card->name		= "D1 Audio Codec";
+	card->dapm_widgets	= sun6i_codec_card_dapm_widgets;
+	card->num_dapm_widgets	= ARRAY_SIZE(sun6i_codec_card_dapm_widgets);
+	card->dapm_routes	= sun20i_d1_codec_card_routes;
+	card->num_dapm_routes	= ARRAY_SIZE(sun20i_d1_codec_card_routes);
+	card->aux_dev		= &aux_dev;
+	card->num_aux_devs	= 1;
+	card->fully_routed	= true;
+
+	ret = snd_soc_of_parse_audio_routing(card, "allwinner,audio-routing");
+	if (ret)
+		dev_warn(dev, "failed to parse audio-routing: %d\n", ret);
+
+	return card;
+};
+
 static const struct regmap_config sun4i_codec_regmap_config = {
 	.reg_bits	= 32,
 	.reg_stride	= 4,
@@ -2130,6 +2287,14 @@ static const struct regmap_config sun50i_h616_codec_regmap_config = {
 	.cache_type	= REGCACHE_NONE,
 };
 
+
+static const struct regmap_config sun20i_d1_codec_regmap_config = {
+	.reg_bits	= 32,
+	.reg_stride	= 4,
+	.val_bits	= 32,
+	.max_register	= SUN20I_D1_CODEC_VRA1SPEEDUP_DOWN_CTRL,
+};
+
 static const struct regmap_config suniv_codec_regmap_config = {
 	.reg_bits	= 32,
 	.reg_stride	= 4,
@@ -2147,6 +2312,7 @@ struct sun4i_codec_quirks {
 	unsigned int reg_adc_rxdata;	/* RX FIFO offset for DMA config */
 	bool has_reset;
 	bool playback_only;
+	bool has_dual_clock;
 	u32 dma_max_burst;
 };
 
@@ -2229,6 +2395,21 @@ static const struct sun4i_codec_quirks sun8i_v3s_codec_quirks = {
 	.dma_max_burst	= SUN4I_DMA_MAX_BURST,
 };
 
+
+static const struct sun4i_codec_quirks sun20i_d1_codec_quirks = {
+	.regmap_config	= &sun20i_d1_codec_regmap_config,
+	.codec		= &sun20i_d1_codec_codec,
+	.create_card	= sun20i_d1_codec_create_card,
+	.reg_adc_fifoc	= REG_FIELD(SUN20I_D1_CODEC_ADC_FIFOC, 0, 31),
+	.reg_dac_fifoc	= REG_FIELD(SUN20I_D1_CODEC_DAC_FIFOC, 0, 31),
+	.reg_dac_txdata	= SUN8I_H3_CODEC_DAC_TXDATA,
+	.reg_adc_rxdata	= SUN20I_D1_CODEC_ADC_RXDATA,
+	.has_reset	= true,
+	.playback_only	= true,
+	.has_dual_clock	= true,
+	.dma_max_burst	= SUN4I_DMA_MAX_BURST,
+};
+
 static const struct sun4i_codec_quirks sun50i_h616_codec_quirks = {
 	.regmap_config	= &sun50i_h616_codec_regmap_config,
 	.codec		= &sun50i_h616_codec_codec,
@@ -2275,6 +2456,10 @@ static const struct of_device_id sun4i_codec_of_match[] = {
 	{
 		.compatible = "allwinner,sun8i-v3s-codec",
 		.data = &sun8i_v3s_codec_quirks,
+	},
+	{
+		.compatible = "allwinner,sun20i-d1-codec",
+		.data = &sun20i_d1_codec_quirks,
 	},
 	{
 		.compatible = "allwinner,sun50i-h616-codec",
@@ -2327,10 +2512,24 @@ static int sun4i_codec_probe(struct platform_device *pdev)
 		return PTR_ERR(scodec->clk_apb);
 	}
 
-	scodec->clk_module = devm_clk_get(&pdev->dev, "codec");
-	if (IS_ERR(scodec->clk_module)) {
-		dev_err(&pdev->dev, "Failed to get the module clock\n");
-		return PTR_ERR(scodec->clk_module);
+	if (quirks->has_dual_clock) {
+		scodec->clk_module = devm_clk_get(&pdev->dev, "adc");
+		if (IS_ERR(scodec->clk_module)) {
+			dev_err(&pdev->dev, "Failed to get the ADC module clock\n");
+			return PTR_ERR(scodec->clk_module);
+		}
+
+		scodec->clk_module_dac = devm_clk_get(&pdev->dev, "dac");
+		if (IS_ERR(scodec->clk_module_dac)) {
+			dev_err(&pdev->dev, "Failed to get the DAC module clock\n");
+			return PTR_ERR(scodec->clk_module_dac);
+		}
+	} else {
+		scodec->clk_module = devm_clk_get(&pdev->dev, "codec");
+		if (IS_ERR(scodec->clk_module)) {
+			dev_err(&pdev->dev, "Failed to get the module clock\n");
+			return PTR_ERR(scodec->clk_module);
+		}
 	}
 
 	if (quirks->has_reset) {

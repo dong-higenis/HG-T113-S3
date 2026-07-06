@@ -311,3 +311,12 @@
 		remote-endpoint = <&lcd_panel_in>;
 	};
 };
+
+&codec {
+	status = "okay";
+	allwinner,audio-routing = "Headphone", "HP";
+};
+
+&codec_analog {
+	status = "okay";
+};
