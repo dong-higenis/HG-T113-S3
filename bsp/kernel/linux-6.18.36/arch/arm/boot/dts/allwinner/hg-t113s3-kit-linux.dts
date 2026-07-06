@@ -141,6 +141,11 @@
 		pins = "PE12", "PE13";
 		function = "i2c2";
 	};
+
+	can0_pins: can0-pins {
+		pins = "PB2", "PB3";
+		function = "can0";
+	};
 };
 
 /* Debug UART0: PE2=TX, PE3=RX */
@@ -320,3 +325,10 @@
 &codec_analog {
 	status = "okay";
 };
+
+&can0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&can0_pins>;
+	status = "okay";
+};
+
