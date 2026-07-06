@@ -57,7 +57,7 @@ BUILDROOT_DIR="${SCRIPT_DIR}/rootfs/buildroot-2026.05"
 #
 UBOOT_DEFCONFIG="hg-t113s3-kit-spi_defconfig"
 KERNEL_DEFCONFIG="hg-t113s3-kit-linux_defconfig"
-BUILDROOT_DEFCONFIG="hg-t113s3-kit-rootfs_defconfig"
+BUILDROOT_DEFCONFIG="${BUILDROOT_DIR}/configs/hg-t113s3-kit-rootfs_defconfig"
 
 
 echo "========================================"
@@ -135,13 +135,14 @@ if [ ! -d "${BUILDROOT_DIR}" ]; then
     exit 1
 fi
 
-if [ ! -f "${BUILDROOT_DIR}/.config" ]; then
-    echo "[INFO] Buildroot 설정 파일이 없어 defconfig를 적용합니다."
-
-    make -C "${BUILDROOT_DIR}" "${BUILDROOT_DEFCONFIG}"
+if [ ! -f "${BUILDROOT_DEFCONFIG}" ]; then
+    echo "[ERROR] Buildroot defconfig 파일이 없습니다."
+    echo "경로: ${BUILDROOT_DEFCONFIG}"
+    exit 1
 fi
 
-make -C "${BUILDROOT_DIR}" -j"${JOBS}"
+make -C "${BUILDROOT_DIR}" BR2_DEFCONFIG="${BUILDROOT_DEFCONFIG}" defconfig
+make -C "${BUILDROOT_DIR}"
 
 echo
 echo "========================================"
