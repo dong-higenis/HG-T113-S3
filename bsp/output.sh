@@ -118,7 +118,7 @@ make -C "${KERNEL_DIR}" \
     ARCH="${ARCH}" \
     CROSS_COMPILE="${CROSS_COMPILE}" \
     -j"${JOBS}" \
-    zImage dtbs modules
+    zImage allwinner/hg-t113s3-kit-linux.dtb modules
 
 #
 # Buildroot 빌드
