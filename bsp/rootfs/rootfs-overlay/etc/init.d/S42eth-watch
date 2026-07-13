@@ -1,0 +1,65 @@
+#!/bin/sh
+
+start_eth_dhcp()
+{
+	if ! ip link show eth0 | grep -q "UP"; then
+		ip link set eth0 up
+	fi
+
+	if [ ! -f /var/run/udhcpc.eth0.pid ]; then
+		echo "[eth-watch] start udhcpc"
+		udhcpc -i eth0 -b -R -p /var/run/udhcpc.eth0.pid
+	fi
+}
+
+stop_eth_dhcp()
+{
+	if [ -f /var/run/udhcpc.eth0.pid ]; then
+		echo "[eth-watch] stop udhcpc"
+		kill "$(cat /var/run/udhcpc.eth0.pid)" 2>/dev/null
+		rm -f /var/run/udhcpc.eth0.pid
+	fi
+}
+
+case "$1" in
+	start)
+		ip link set eth0 up
+
+		while true; do
+			if [ -e /sys/class/net/eth0/carrier ]; then
+				CARRIER="$(cat /sys/class/net/eth0/carrier 2>/dev/null)"
+
+				if [ "$CARRIER" = "1" ]; then
+					start_eth_dhcp
+				else
+					stop_eth_dhcp
+				fi
+			fi
+
+			sleep 2
+		done &
+		echo $! > /var/run/eth-watch.pid
+		;;
+
+	stop)
+		if [ -f /var/run/eth-watch.pid ]; then
+			kill "$(cat /var/run/eth-watch.pid)" 2>/dev/null
+			rm -f /var/run/eth-watch.pid
+		fi
+		stop_eth_dhcp
+		ip link set eth0 down
+		;;
+
+	restart)
+		"$0" stop
+		sleep 1
+		"$0" start
+		;;
+
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac
+
+exit 0

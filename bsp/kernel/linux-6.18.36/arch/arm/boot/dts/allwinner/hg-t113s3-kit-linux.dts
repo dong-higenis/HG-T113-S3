@@ -17,6 +17,7 @@
 		serial0 = &uart0;
 		serial1 = &uart1;
 		serial2 = &uart4;
+        ethernet0 = &emac;
 	};
 
 	chosen {
@@ -129,10 +130,12 @@
 	 * PF: SD card
 	 * PD: LCD
 	 */
+	vcc-pb-supply = <&reg_vcc_3v3>;
 	vcc-pc-supply = <&reg_vcc_3v3>;
+	vcc-pd-supply = <&reg_vcc_3v3>;
 	vcc-pe-supply = <&reg_vcc_3v3>;
 	vcc-pf-supply = <&reg_vcc_3v3>;
-	vcc-pd-supply = <&reg_vcc_3v3>;
+	vcc-pg-supply = <&reg_vcc_3v3>;
 
 	uart0_pe_pins: uart0-pe-pins {
 		pins = "PE2", "PE3";
@@ -148,6 +151,22 @@
 		pins = "PB2", "PB3";
 		function = "can0";
 	};
+
+	rmii_pg_pins: rmii-pg-pins {
+		pins = "PG0",  /* CRS_DV */
+		       "PG1",  /* RXD0   */
+		       "PG2",  /* RXD1   */
+		       "PG3",  /* REF_CLK */
+		       "PG4",  /* TXD0   */
+		       "PG5",  /* TXD1   */
+		       "PG12", /* TXEN   */
+		       "PG14", /* MDC    */
+		       "PG15"; /* MDIO   */
+		function = "emac";
+		drive-strength = <30>;
+		bias-disable;
+	};
+
 };
 
 /* Debug UART0: PE2=TX, PE3=RX */
@@ -344,4 +363,26 @@
 
 &ohci1 {
     status = "okay";
+};
+
+&emac {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rmii_pg_pins>;
+
+	phy-mode = "rmii";
+	phy-handle = <&eth_phy0>;
+
+	status = "okay";
+};
+
+&mdio {
+	status = "okay";
+
+	eth_phy0: ethernet-phy@0 {
+		reg = <0>;
+
+		reset-gpios = <&pio 6 13 GPIO_ACTIVE_LOW>;
+		reset-assert-us = <10000>;
+		reset-deassert-us = <100000>;
+	};
 };

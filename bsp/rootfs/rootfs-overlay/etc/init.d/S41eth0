@@ -1,0 +1,34 @@
+#!/bin/sh
+
+case "$1" in
+	start)
+		echo "[eth0] bring up"
+		ip link set eth0 up
+		udhcpc -i eth0 -b -R -p /var/run/udhcpc.eth0.pid
+		;;
+
+	stop)
+		echo "[eth0] stop"
+
+		if [ -f /var/run/udhcpc.eth0.pid ]; then
+			kill "$(cat /var/run/udhcpc.eth0.pid)" 2>/dev/null
+			rm -f /var/run/udhcpc.eth0.pid
+		fi
+
+		ip link set eth0 down
+		;;
+
+	restart)
+		"$0" stop
+		sleep 1
+		"$0" start
+		;;
+
+	*)
+
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit 0
