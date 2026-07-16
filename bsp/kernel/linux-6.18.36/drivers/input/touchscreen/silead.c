@@ -375,6 +375,116 @@ i2c_write_err:
 	dev_err(&client->dev, "Chip reset error %d\n", error);
 	return error;
 }
+/*
+ * BuyDisplay ER-TFT050-6 / GSL1680F vendor initialization.
+ *
+ * Based on BuyDisplay's sunplus_gslX680.c startup_chip().
+ */
+static int silead_ts_buydisplay_clear(struct i2c_client *client)
+{
+	int error;
+
+	error = i2c_smbus_write_byte_data(client,
+					  SILEAD_REG_RESET,
+					  SILEAD_CMD_RESET);
+	if (error)
+		goto error;
+
+	msleep(20);
+
+	/*
+	 * BuyDisplay vendor driver writes 0x01 here,
+	 * rather than SILEAD_MAX_FINGERS.
+	 */
+	error = i2c_smbus_write_byte_data(client,
+					  SILEAD_REG_DATA,
+					  0x01);
+	if (error)
+		goto error;
+
+	msleep(5);
+
+	error = i2c_smbus_write_byte_data(client,
+					  SILEAD_REG_CLOCK,
+					  SILEAD_CLOCK);
+	if (error)
+		goto error;
+
+	msleep(5);
+
+	error = i2c_smbus_write_byte_data(client,
+					  SILEAD_REG_RESET,
+					  SILEAD_CMD_START);
+	if (error)
+		goto error;
+
+	msleep(20);
+
+	return 0;
+
+error:
+	dev_err(&client->dev,
+		"BuyDisplay register clear error %d\n", error);
+
+	return error;
+}
+
+static int silead_ts_buydisplay_startup(struct i2c_client *client)
+{
+	static const u8 page_data[4] = {
+		0x00, 0x10, 0xfe, 0x01
+	};
+	static const u8 startup_data[4] = {
+		0x0f, 0x00, 0x00, 0x00
+	};
+	static const u8 start_command[4] = {
+		0x00, 0x00, 0x00, 0x00
+	};
+	int error;
+
+	/*
+	 * Equivalent to:
+	 * { page register 0xf0 = 0x01fe1000 }
+	 */
+	error = i2c_smbus_write_i2c_block_data(client,
+					       0xf0,
+					       sizeof(page_data),
+					       page_data);
+	if (error)
+		goto error;
+
+	/*
+	 * Write 0x0000000f to offset 0x04 on the selected page.
+	 */
+	error = i2c_smbus_write_i2c_block_data(client,
+					       0x04,
+					       sizeof(startup_data),
+					       startup_data);
+	if (error)
+		goto error;
+
+	msleep(20);
+
+	/*
+	 * Vendor driver writes four zero bytes to E0.
+	 */
+	error = i2c_smbus_write_i2c_block_data(client,
+					       SILEAD_REG_RESET,
+					       sizeof(start_command),
+					       start_command);
+	if (error)
+		goto error;
+
+	msleep(10);
+
+	return 0;
+
+error:
+	dev_err(&client->dev,
+		"BuyDisplay startup error %d\n", error);
+
+	return error;
+}
 
 static int silead_ts_startup(struct i2c_client *client)
 {
@@ -545,7 +655,7 @@ static int silead_ts_setup(struct i2c_client *client)
 		dev_err(&client->dev, "Chip ID read error %d\n", error);
 		return error;
 	}
-
+#if 0
 	error = silead_ts_init(client);
 	if (error)
 		return error;
@@ -561,7 +671,35 @@ static int silead_ts_setup(struct i2c_client *client)
 	error = silead_ts_startup(client);
 	if (error)
 		return error;
+#else
+	error = silead_ts_buydisplay_clear(client);
+	if (error)
+		return error;
 
+	error = silead_ts_reset(client);
+	if (error)
+		return error;
+
+	error = silead_ts_load_fw(client);
+	if (error)
+		return error;
+
+	/*
+	* BuyDisplay vendor sequence:
+	* startup -> reset -> startup
+	*/
+	error = silead_ts_buydisplay_startup(client);
+	if (error)
+		return error;
+
+	error = silead_ts_reset(client);
+	if (error)
+		return error;
+
+	error = silead_ts_buydisplay_startup(client);
+	if (error)
+		return error;
+#endif
 	status = silead_ts_get_status(client);
 	if (status != SILEAD_STATUS_OK) {
 		dev_err(&client->dev,

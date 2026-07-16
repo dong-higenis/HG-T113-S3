@@ -313,14 +313,40 @@
 	clock-frequency = <100000>;
 	status = "okay";
 
-	touchscreen@38 {
+	/*
+	 * FocalTech FT5206
+	 * I2C address : 0x38
+	 */
+	ft5206_ts: touchscreen@38 {
 		compatible = "edt,edt-ft5206";
 		reg = <0x38>;
 		interrupt-parent = <&pio>;
-		interrupts = <1 7 IRQ_TYPE_EDGE_FALLING>;   /* PB7 */
-		reset-gpios = <&pio 1 6 GPIO_ACTIVE_LOW>;   /* PB6 */
+		interrupts = <1 7 IRQ_TYPE_EDGE_FALLING>; /* PB7 */
+		reset-gpios = <&pio 1 6 GPIO_ACTIVE_LOW>; /* PB6 */
+		vcc-supply = <&reg_vcc_3v3>;
+		iovcc-supply = <&reg_vcc_3v3>;
 		touchscreen-size-x = <800>;
 		touchscreen-size-y = <480>;
+		status = "disabled";
+	};
+
+	/*
+	 * Silead GSL1680F
+	 * I2C address : 0x40
+	 */
+	gsl1680_ts: touchscreen@40 {
+		compatible = "silead,gsl1680";
+		reg = <0x40>;
+		interrupt-parent = <&pio>;
+		interrupts = <1 7 IRQ_TYPE_EDGE_FALLING>; /* PB7 */
+		power-gpios = <&pio 1 6 GPIO_ACTIVE_HIGH>; /* PB6 */
+		vddio-supply = <&reg_vcc_3v3>;
+		avdd-supply = <&reg_vcc_3v3>;
+		touchscreen-size-x = <480>;
+		touchscreen-size-y = <800>;
+		touchscreen-swapped-x-y;
+		silead,max-fingers = <5>;
+		firmware-name = "GSLX680_FW.fw";
 		status = "okay";
 	};
 };
